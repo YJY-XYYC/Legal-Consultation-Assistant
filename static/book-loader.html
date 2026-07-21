@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>正在翻阅 · 劳动与社会保障法律法规</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    color-scheme: light dark;
+    --bg: transparent;
+    --bg-2: #ece2cb;
+    --paper: #fbf7ec;
+    /* 书本动画专属色（不随主题变化） */
+    --ink: #2a2419;
+    --ink-2: #5a4d3a;
+    --ink-soft: rgba(42, 36, 25, 0.38);
+    --ink-faint: rgba(42, 36, 25, 0.14);
+    --accent: #b87333;
+    --accent-2: #c8954c;
+    /* 页面文字/装饰色（随主题切换） */
+    --text: light-dark(#2a2419, #d4c8b0);
+    --text-2: light-dark(#5a4d3a, #b0a590);
+    --text-soft: light-dark(rgba(42,36,25,0.38), rgba(210,200,175,0.45));
+    --text-faint: light-dark(rgba(42,36,25,0.14), rgba(210,200,175,0.18));
+  }
+
+  html, body {
+    height: 100%;
+    background: transparent;
+    font-family: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif SC', Georgia, serif;
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  .stage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 56px;
+  }
+
+  .brand {
+    position: fixed;
+    top: 36px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    font-size: 16px;
+    letter-spacing: 0.45em;
+    color: var(--text-2);
+    opacity: 0.75;
+    padding-left: 0.45em;
+  }
+  .brand-line {
+    width: 54px;
+    height: 1px;
+    background: var(--text-soft);
+  }
+
+  .corner {
+    position: fixed;
+    width: 72px;
+    height: 72px;
+    border: 2px solid var(--text-faint);
+    pointer-events: none;
+  }
+  .corner.tl { top: 24px; left: 24px; border-right: none; border-bottom: none; }
+  .corner.tr { top: 24px; right: 24px; border-left: none; border-bottom: none; }
+  .corner.bl { bottom: 24px; left: 24px; border-right: none; border-top: none; }
+  .corner.br { bottom: 24px; right: 24px; border-left: none; border-top: none; }
+
+  .scene {
+    width: 340px;
+    height: 230px;
+    perspective: 1600px;
+    perspective-origin: 50% 30%;
+  }
+
+  .book {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transform: rotateX(24deg);
+  }
+
+  .book::after {
+    content: '';
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    bottom: -14px;
+    height: 22px;
+    background: radial-gradient(ellipse at center, rgba(42, 36, 25, 0.28), transparent 70%);
+    filter: blur(10px);
+    transform: translateZ(-20px) rotateX(-24deg);
+  }
+
+  .book-base {
+    position: absolute;
+    inset: 0;
+  }
+  .book-base img {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .page {
+    position: absolute;
+    left: 170px;
+    top: 30px;
+    width: 150px;
+    height: 170px;
+    transform-origin: 0% 50%;
+    transform-style: preserve-3d;
+    animation: pageFlip 3.6s infinite cubic-bezier(0.65, 0, 0.35, 1);
+  }
+
+  @keyframes pageFlip {
+    0%       { transform: rotateY(0deg); opacity: 1; }
+    45%      { transform: rotateY(-175deg); opacity: 1; }
+    50%      { transform: rotateY(-180deg); opacity: 0; }
+    100%     { transform: rotateY(-180deg); opacity: 0; }
+  }
+
+  .page-face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    background: var(--paper);
+    border-radius: 0 4px 4px 0;
+    box-shadow:
+      inset 6px 0 14px -6px rgba(42, 36, 25, 0.28),
+      0 0 0 1px var(--ink-faint);
+    overflow: hidden;
+  }
+  .page-face.back {
+    transform: rotateY(180deg);
+    background: var(--paper);
+    border-radius: 4px 0 0 4px;
+    box-shadow:
+      inset -6px 0 14px -6px rgba(42, 36, 25, 0.28),
+      0 0 0 1px var(--ink-faint);
+  }
+  .page-face img {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .caption {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+  }
+  .caption-title {
+    font-size: 20px;
+    letter-spacing: 0.6em;
+    font-weight: 400;
+    color: var(--text);
+    padding-left: 0.6em;
+    position: relative;
+    animation: titlePulse 3.6s infinite ease-in-out;
+  }
+  .caption-title::before,
+  .caption-title::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 42px;
+    height: 1px;
+    background: var(--text-soft);
+  }
+  .caption-title::before { right: calc(100% + 24px); }
+  .caption-title::after { left: calc(100% + 24px); }
+  @keyframes titlePulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+
+  .caption-sub {
+    font-size: 17px;
+    letter-spacing: 0.35em;
+    color: var(--text-2);
+    opacity: 0.75;
+    padding-left: 0.35em;
+  }
+
+  .progress {
+    width: 340px;
+    height: 1px;
+    background: var(--text-faint);
+    position: relative;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+  .progress-bar {
+    position: absolute;
+    height: 100%;
+    width: 38%;
+    background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2));
+    animation: progress 3.6s infinite cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  @keyframes progress {
+    0%       { left: -38%; }
+    48%      { left: 100%; }
+    49.9%    { left: 100%; }
+    50%      { left: -38%; }
+    100%     { left: -38%; }
+  }
+
+  /* 书本左右两侧的上升符号 */
+  .side-mark {
+    position: absolute;
+    top: 50%;
+    font-family: serif;
+    font-size: 22px;
+    color: var(--text);
+    opacity: 0;
+    pointer-events: none;
+    user-select: none;
+    transform: translateY(120px) translateX(-50%) rotate(0deg);
+    animation: sideMarkUp 7s infinite cubic-bezier(0.45, 0, 0.55, 1);
+  }
+  .side-mark.left {
+    left: -42px;
+    animation-delay: 0s;
+  }
+  .side-mark.right {
+    left: calc(100% + 42px);
+    animation-delay: 3.5s;
+  }
+  @keyframes sideMarkUp {
+    0% {
+      opacity: 0;
+      transform: translateY(120px) translateX(-50%) rotate(0deg);
+    }
+    15% { opacity: 0.45; }
+    85% { opacity: 0.1; }
+    100% {
+      opacity: 0;
+      transform: translateY(-140px) translateX(-50%) rotate(8deg);
+    }
+  }
+
+  .footer {
+    position: fixed;
+    bottom: 36px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 15px;
+    letter-spacing: 0.32em;
+    color: var(--text-soft);
+    display: flex;
+    gap: 22px;
+    align-items: center;
+    padding-left: 0.32em;
+    white-space: nowrap;
+  }
+  .footer-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-soft);
+  }
+  .footer .step {
+    opacity: 0.5;
+    color: var(--text-soft);
+  }
+  .footer .step[data-step="0"] { animation: stepAnim0 10.8s infinite; }
+  .footer .step[data-step="1"] { animation: stepAnim1 10.8s infinite; }
+  .footer .step[data-step="2"] { animation: stepAnim2 10.8s infinite; }
+
+  @keyframes stepAnim0 {
+    0%, 27.8% { opacity: 1; color: var(--accent); }
+    33.33%, 100% { opacity: 0.5; color: var(--text-soft); }
+  }
+  @keyframes stepAnim1 {
+    0%, 27.8% { opacity: 0.5; color: var(--text-soft); }
+    33.33%, 61.1% { opacity: 1; color: var(--accent); }
+    66.66%, 100% { opacity: 0.5; color: var(--text-soft); }
+  }
+  @keyframes stepAnim2 {
+    0%, 61.1% { opacity: 0.5; color: var(--text-soft); }
+    66.66%, 94.4% { opacity: 1; color: var(--accent); }
+    100% { opacity: 0.5; color: var(--text-soft); }
+  }
+
+  @media (max-width: 520px) {
+    .scene { width: 280px; height: 190px; }
+    .corner { width: 52px; height: 52px; }
+    .footer { font-size: 9px; gap: 10px; }
+    .caption-title::before, .caption-title::after { width: 18px; }
+    .page {
+      left: 140px;
+      top: 24px;
+      width: 124px;
+      height: 142px;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+  <div class="brand">
+    <span class="brand-line"></span>
+    <span>LEX · LIBER</span>
+    <span class="brand-line"></span>
+  </div>
+
+  <div class="stage">
+    <div class="scene">
+      <div class="book">
+        <div class="book-base">
+          <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzNDAgMjMwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBzdHlsZT0ib3ZlcmZsb3c6dmlzaWJsZSI+CiAgPHBhdGggZD0iTSAyNCAzMCBMIDMxNiAzMCBBIDQgNCAwIDAgMSAzMjAgMzQgTCAzMjAgMTk2IEEgNCA0IDAgMCAxIDMxNiAyMDAgTCAyNCAyMDAgQSA0IDQgMCAwIDEgMjAgMTk2IEwgMjAgMzQgQSA0IDQgMCAwIDEgMjQgMzAgWiIgc3Ryb2tlPSIjMmEyNDE5IiBzdHJva2Utd2lkdGg9IjEuNSIgZmlsbD0ibm9uZSIvPgogIDxwYXRoIGQ9Ik0gMjQgMzAgTCAxNzAgMzAgTCAxNzAgMjAwIEwgMjQgMjAwIEEgNCA0IDAgMCAxIDIwIDE5NiBMIDIwIDM0IEEgNCA0IDAgMCAxIDI0IDMwIFoiIGZpbGw9IiNmYmY3ZWMiLz4KICA8cGF0aCBkPSJNIDE3MCAzMCBMIDMxNiAzMCBBIDQgNCAwIDAgMSAzMjAgMzQgTCAzMjAgMTk2IEEgNCA0IDAgMCAxIDMxNiAyMDAgTCAxNzAgMjAwIFoiIGZpbGw9IiNmYmY3ZWMiLz4KICA8bGluZSB4MT0iMTcwIiB5MT0iMzAiIHgyPSIxNzAiIHkyPSIyMDAiIHN0cm9rZT0iIzJhMjQxOSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICA8Y2lyY2xlIGN4PSIxNzAiIGN5PSI0NCIgcj0iMS4zIiBmaWxsPSIjMmEyNDE5IiBvcGFjaXR5PSIwLjQ1Ii8+CiAgPGNpcmNsZSBjeD0iMTcwIiBjeT0iMTg2IiByPSIxLjMiIGZpbGw9IiMyYTI0MTkiIG9wYWNpdHk9IjAuNDUiLz4KICA8ZyBzdHJva2U9IiMyYTI0MTkiIGZpbGw9Im5vbmUiIHN0cm9rZS13aWR0aD0iMC43IiBvcGFjaXR5PSIwLjUyIj4KICAgIDxsaW5lIHgxPSIzNiIgeTE9IjU4IiB4Mj0iMTU0IiB5Mj0iNTgiLz4KICAgIDxsaW5lIHgxPSIzNiIgeTE9Ijc0IiB4Mj0iMTQ4IiB5Mj0iNzQiLz4KICAgIDxsaW5lIHgxPSIzNiIgeTE9IjkwIiB4Mj0iMTU4IiB5Mj0iOTAiLz4KICAgIDxsaW5lIHgxPSIzNiIgeTE9IjEwNiIgeDI9IjE0NCIgeTI9IjEwNiIvPgogICAgPGxpbmUgeDE9IjM2IiB5MT0iMTIyIiB4Mj0iMTUyIiB5Mj0iMTIyIi8+CiAgICA8bGluZSB4MT0iMzYiIHkxPSIxMzgiIHgyPSIxNDAiIHkyPSIxMzgiLz4KICAgIDxsaW5lIHgxPSIzNiIgeTE9IjE1NCIgeDI9IjE1MCIgeTI9IjE1NCIvPgogICAgPGxpbmUgeDE9IjM2IiB5MT0iMTcwIiB4Mj0iMTQ2IiB5Mj0iMTcwIi8+CiAgPC9nPgogIDxnIHN0cm9rZT0iIzJhMjQxOSIgZmlsbD0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIwLjciIG9wYWNpdHk9IjAuNTIiPgogICAgPGxpbmUgeDE9IjE4NiIgeTE9IjU4IiB4Mj0iMzA0IiB5Mj0iNTgiLz4KICAgIDxsaW5lIHgxPSIxODYiIHkxPSI3NCIgeDI9IjI5OCIgeTI9Ijc0Ii8+CiAgICA8bGluZSB4MT0iMTg2IiB5MT0iOTAiIHgyPSIzMDgiIHkyPSI5MCIvPgogICAgPGxpbmUgeDE9IjE4NiIgeTE9IjEwNiIgeDI9IjI5NCIgeTI9IjEwNiIvPgogICAgPGxpbmUgeDE9IjE4NiIgeTE9IjEyMiIgeDI9IjMwMiIgeTI9IjEyMiIvPgogICAgPGxpbmUgeDE9IjE4NiIgeTE9IjEzOCIgeDI9IjI5MCIgeTI9IjEzOCIvPgogICAgPGxpbmUgeDE9IjE4NiIgeTE9IjE1NCIgeDI9IjMwMCIgeTI9IjE1NCIvPgogICAgPGxpbmUgeDE9IjE4NiIgeTE9IjE3MCIgeDI9IjI5NiIgeTI9IjE3MCIvPgogIDwvZz4KICA8bGluZSB4MT0iMTcwIiB5MT0iMzAiIHgyPSIxNzAiIHkyPSIyMDAiIHN0cm9rZT0iIzJhMjQxOSIgc3Ryb2tlLXdpZHRoPSIzIiBvcGFjaXR5PSIwLjA4Ii8+Cjwvc3ZnPg==" alt="" style="width:100%;height:100%;overflow:visible">
+        </div>
+
+        <div class="page" style="animation-delay: 0s">
+          <div class="page-face front">
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTAgMTcwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBzdHlsZT0iZGlzcGxheTpibG9jayI+CiAgPGcgc3Ryb2tlPSIjMmEyNDE5IiBzdHJva2Utd2lkdGg9IjAuNyIgb3BhY2l0eT0iMC41MiIgZmlsbD0ibm9uZSI+CiAgICA8bGluZSB4MT0iMTYiIHkxPSIyOCIgeDI9IjEzNCIgeTI9IjI4Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI0NCIgeDI9IjEyOCIgeTI9IjQ0Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI2MCIgeDI9IjEzOCIgeTI9IjYwIi8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI3NiIgeDI9IjEyNCIgeTI9Ijc2Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI5MiIgeDI9IjEzMiIgeTI9IjkyIi8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSIxMDgiIHgyPSIxMjAiIHkyPSIxMDgiLz4KICAgIDxsaW5lIHgxPSIxNiIgeTE9IjEyNCIgeDI9IjEzMCIgeTI9IjEyNCIvPgogICAgPGxpbmUgeDE9IjE2IiB5MT0iMTQwIiB4Mj0iMTI2IiB5Mj0iMTQwIi8+CiAgPC9nPgo8L3N2Zz4=" alt="" style="width:100%;height:100%;display:block">
+          </div>
+          <div class="page-face back">
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTAgMTcwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBzdHlsZT0iZGlzcGxheTpibG9jayI+CiAgPGcgc3Ryb2tlPSIjMmEyNDE5IiBzdHJva2Utd2lkdGg9IjAuNyIgb3BhY2l0eT0iMC41MiIgZmlsbD0ibm9uZSI+CiAgICA8bGluZSB4MT0iMTYiIHkxPSIyOCIgeDI9IjEzNCIgeTI9IjI4Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI0NCIgeDI9IjEyOCIgeTI9IjQ0Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI2MCIgeDI9IjEzOCIgeTI9IjYwIi8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI3NiIgeDI9IjEyNCIgeTI9Ijc2Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI5MiIgeDI9IjEzMiIgeTI9IjkyIi8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSIxMDgiIHgyPSIxMjAiIHkyPSIxMDgiLz4KICAgIDxsaW5lIHgxPSIxNiIgeTE9IjEyNCIgeDI9IjEzMCIgeTI9IjEyNCIvPgogICAgPGxpbmUgeDE9IjE2IiB5MT0iMTQwIiB4Mj0iMTI2IiB5Mj0iMTQwIi8+CiAgPC9nPgo8L3N2Zz4=" alt="" style="width:100%;height:100%;display:block">
+          </div>
+        </div>
+        <div class="page" style="animation-delay: -1.8s">
+          <div class="page-face front">
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTAgMTcwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBzdHlsZT0iZGlzcGxheTpibG9jayI+CiAgPGcgc3Ryb2tlPSIjMmEyNDE5IiBzdHJva2Utd2lkdGg9IjAuNyIgb3BhY2l0eT0iMC41MiIgZmlsbD0ibm9uZSI+CiAgICA8bGluZSB4MT0iMTYiIHkxPSIyOCIgeDI9IjEzNCIgeTI9IjI4Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI0NCIgeDI9IjEyOCIgeTI9IjQ0Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI2MCIgeDI9IjEzOCIgeTI9IjYwIi8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI3NiIgeDI9IjEyNCIgeTI9Ijc2Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI5MiIgeDI9IjEzMiIgeTI9IjkyIi8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSIxMDgiIHgyPSIxMjAiIHkyPSIxMDgiLz4KICAgIDxsaW5lIHgxPSIxNiIgeTE9IjEyNCIgeDI9IjEzMCIgeTI9IjEyNCIvPgogICAgPGxpbmUgeDE9IjE2IiB5MT0iMTQwIiB4Mj0iMTI2IiB5Mj0iMTQwIi8+CiAgPC9nPgo8L3N2Zz4=" alt="" style="width:100%;height:100%;display:block">
+          </div>
+          <div class="page-face back">
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNTAgMTcwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBzdHlsZT0iZGlzcGxheTpibG9jayI+CiAgPGcgc3Ryb2tlPSIjMmEyNDE5IiBzdHJva2Utd2lkdGg9IjAuNyIgb3BhY2l0eT0iMC41MiIgZmlsbD0ibm9uZSI+CiAgICA8bGluZSB4MT0iMTYiIHkxPSIyOCIgeDI9IjEzNCIgeTI9IjI4Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI0NCIgeDI9IjEyOCIgeTI9IjQ0Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI2MCIgeDI9IjEzOCIgeTI9IjYwIi8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI3NiIgeDI9IjEyNCIgeTI9Ijc2Ii8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSI5MiIgeDI9IjEzMiIgeTI9IjkyIi8+CiAgICA8bGluZSB4MT0iMTYiIHkxPSIxMDgiIHgyPSIxMjAiIHkyPSIxMDgiLz4KICAgIDxsaW5lIHgxPSIxNiIgeTE9IjEyNCIgeDI9IjEzMCIgeTI9IjEyNCIvPgogICAgPGxpbmUgeDE9IjE2IiB5MT0iMTQwIiB4Mj0iMTI2IiB5Mj0iMTQwIi8+CiAgPC9nPgo8L3N2Zz4=" alt="" style="width:100%;height:100%;display:block">
+          </div>
+        </div>
+
+        <!-- 左右两侧的上升符号 -->
+        <span class="side-mark left">§</span>
+        <span class="side-mark right">§</span>
+      </div>
+    </div>
+
+    <div class="caption">
+      <div class="caption-title">正 在 翻 阅</div>
+      <div class="caption-sub">劳动与社会保障法律法规</div>
+      <div class="progress">
+        <div class="progress-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="step" data-step="0">检索知识库</span>
+    <span class="footer-dot"></span>
+    <span class="step" data-step="1">加载向量索引</span>
+    <span class="footer-dot"></span>
+    <span class="step" data-step="2">初始化会话</span>
+  </div>
+
+</body>
+</html>

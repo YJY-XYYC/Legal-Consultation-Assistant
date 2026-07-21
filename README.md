@@ -46,13 +46,13 @@
 
 ### 🤖 Agent 智能体
 
-- **ReAct 风格**推理与任务规划
+- **LangGraph ReAct 风格**推理与任务规划
 - **三大核心工具**：
-  - 🐍 `python_runner` — 实时运行 Python 代码
-  - 🧮 `calculator` — 基于 SymPy 的精确数学计算
-  - 🔍 `web_search` — 基于 DuckDuckGo 的联网检索
-- **流式输出**：思考过程与最终答案分步呈现
-- **可选联网**：Tavily 搜索补充最新信息
+  - 📚 `knowledge_search` — 在劳动法知识库中检索法律条文与实务信息
+  - ⚖️ `legal_calculator` — 劳动法专项赔偿计算器（经济补偿金 N、违法解除 2N、加班费、年假补偿）
+  - 🔍 `web_search` — 基于 Tavily 的联网检索最新法规政策
+- **流式输出**：推理过程（工具调用+结果）与最终答案分步呈现
+- **深度思考模式**：先分析再检索，多角度 + 交叉验证 + 精确计算 + 结构化报告
 
 ### 🧠 深度思考模式
 
@@ -64,14 +64,17 @@
 
 - 多文件批量上传（PDF / DOCX / TXT / MD）
 - 自动解析 → 写入 `knowledge_base/` → 刷新索引
-- 实时显示知识库片段数与文件列表
+- 文件列表展示、单文件删除与批量删除
+- 上传/删除后提示重启以完成初始化
 
 ### 🎨 现代化 Web 界面
 
-- 三栏布局：📖 知识问答 / 🤖 智能体 / 📁 文件上传
-- 底部固定输入区，长对话不丢视野
-- 浅色 / 深色模式自适应
-- 侧边栏系统状态可视化、一键清空
+- Radio 导航栏：📖 知识问答 / 🤖 智能体 / 📁 文件上传（固定顶部）
+- 固定底栏输入区，检索模式 / 联网搜索 / 深度思考复选框内置，长对话不丢视野
+- 浅色 / 深色模式自适应（JS 实时监听）
+- 侧边栏系统状态可视化、对话记忆管理、一键清空
+- 启动时书本翻页加载动画，上传/删除后一键重启对话框
+- 关于页面（Lex Laboris 品牌页）：侧边栏使用说明图标可打开独立页面
 
 ---
 
@@ -97,7 +100,7 @@
         ┌────────────────────┼────────────────────┐
         │                    │                    │
    ┌────▼─────┐      ┌───────▼───────┐    ┌───────▼──────┐
-   │ DeepSeek │      │   Chroma DB   │    │ Tavily / DDG │
+   │ DeepSeek │      │   Chroma DB   │    │   Tavily     │
    │   LLM    │      │   向量库      │    │   联网搜索   │
    └──────────┘      └───────────────┘    └──────────────┘
 ```
@@ -113,10 +116,9 @@
 | 向量数据库 | Chroma 0.4.24（`langchain-chroma` 0.1.0） |
 | Embedding | `paraphrase-multilingual-MiniLM-L12-v2`（多语言 384 维） |
 | 检索策略 | 关键词 / 语义 / RRF 混合 |
-| 联网搜索 | Tavily Search API / DuckDuckGo |
+| 联网搜索 | Tavily Search API |
 | Web 框架 | Streamlit 1.54.0 |
 | 文档解析 | pypdf、python-docx |
-| 数学计算 | SymPy 1.12 |
 | 运行环境 | Python 3.10+（已在 3.13.7 验证） |
 
 ---
@@ -202,20 +204,27 @@ llm-qa-system/
 ├── config.py               # 配置加载与校验
 ├── requirements.txt        # 依赖清单
 ├── README.md               # 项目说明
-├── DEMO.md                 # 演示文档
 ├── .env                    # 环境变量（API Key 等）
 │
 ├── modules/
 │   ├── __init__.py
 │   ├── rag_module.py       # RAG 知识问答模块
 │   ├── agent_module.py     # Agent 智能体模块
-│   └── tools.py            # 工具定义：代码执行 / 计算器 / 联网搜索
+│   └── tools.py            # 工具定义：知识库检索 / 赔偿计算器 / 联网搜索
 │
 ├── knowledge_base/         # 法律知识库（自动加载）
-│   ├── labor_law_overview.md
-│   ├── labor_contract.md
-│   ├── labor_dispute.md
-│   └── social_security.md
+│   ├── labor_law_overview.md       # 劳动法总览
+│   ├── labor_contract.md           # 劳动合同
+│   ├── labor_dispute.md            # 劳动争议
+│   ├── social_security.md          # 社会保险
+│   ├── female_protection.md        # 女职工特殊保护
+│   ├── housing_fund.md             # 住房公积金
+│   ├── judicial_interpretations.md # 司法解释
+│   └── PROJECT_DOCUMENTATION.md    # 项目文档
+│
+├── static/                 # 静态资源
+│   ├── about.html          # 关于页面（Lex Laboris）
+│   └── book-loader.html    # 启动加载动画
 │
 ├── chroma_db/              # Chroma 向量库持久化（首次运行后生成）
 ├── models_cache/           # Embedding 模型本地缓存
@@ -230,23 +239,25 @@ llm-qa-system/
 
 1. 启动时自动加载 `knowledge_base/` 下所有文档
 2. 在「📖 知识问答」Tab 输入法律相关问题
-3. 系统检索 Top-K 文档并结合 DeepSeek 生成答案
-4. 勾选「🌐 联网搜索」可融合最新法规
-5. 支持上下文连续多轮问答
+3. 可在底部下拉菜单切换检索模式（混合 / 语义 / 关键词）
+4. 系统检索 Top-K 文档并结合 DeepSeek 生成答案
+5. 勾选「🌐 联网搜索」可融合最新法规
+6. 支持上下文连续多轮问答
 
 ### 2️⃣ 智能体模式
 
-1. 在「🤖 智能体」Tab 输入复杂任务（如案件分析、维权方案）
-2. 勾选「🧠 深度思考」可查看分步推理过程
-3. 勾选「🌐 联网搜索」可补充最新信息
-4. 思考过程与最终答案分开展示，可折叠查看
+1. 在「🤖 智能体」Tab 输入复杂任务（如案件分析、赔偿计算、维权方案）
+2. Agent 会自动调用知识库检索、赔偿计算器、联网搜索等工具
+3. 勾选「🧠 深度思考」启用多角度检索+交叉验证+精确计算的结构化分析
+4. 勾选「🌐 联网搜索」允许 Agent 联网获取最新法规
+5. 推理过程（含工具调用与结果）与最终答案分开展示，可折叠查看
 
-### 3️⃣ 文件上传
+### 3️⃣ 文件管理
 
 1. 进入「📁 文件上传」Tab
-2. 选择 PDF / DOCX / TXT / MD 文件（支持多选）
-3. 点击「📥 上传并添加到知识库」
-4. 系统自动解析、分块并刷新知识库
+2. 选择 PDF / DOCX / TXT / MD 文件（支持多选），点击「📥 上传并添加到知识库」
+3. 上传后提示重启，一键完成初始化
+4. 已有文件可**单文件删除**或**批量删除**，删除后同样提示重启
 
 ### 4️⃣ 对话记忆管理
 
@@ -335,9 +346,12 @@ UPLOADS_PATH=./uploads
 
 ### Agent 模块（`modules/agent_module.py`）
 
-- **流式输出**：通过 `yield` 逐步返回 `thinking` / `answer` / `web_search` 事件
-- **深度思考**：先独立生成思考过程，再融合思考 + 联网结果生成最终答案
-- **工具调用**：在 `tools.py` 中以 LangChain `@tool` 装饰器声明
+- **LangGraph ReAct Agent**：基于 `create_agent` 构建，自动推理与工具调用循环
+- **三大工具**：`knowledge_search`（知识库检索）、`legal_calculator`（劳动法赔偿计算器，Pydantic 结构化输入）、`web_search`（Tavily 联网搜索）
+- **两套系统提示**：Agent 内置"法律小智"普通模式与深度分析模式两套 prompt
+- **流式输出**：通过 `yield` 逐步返回 `thinking` / `tool_start` / `tool_end` / `answer` 事件
+- **深度思考**：Phase 1 生成结构化分析 → Phase 2 执行 ReAct Agent 工具调用
+- **多会话管理**：以 `session_id` 为 key 隔离上下文，`deque` 限制最大轮数
 
 ---
 
@@ -367,7 +381,7 @@ UPLOADS_PATH=./uploads
 > 4. 制定执行计划：收集证据 → 申请仲裁 → 准备诉讼
 > 5. 预判风险：仲裁时效 1 年，需注意证据保存
 >
-> � **最终答案**：
+> 📋 **最终答案**：
 > 1. 【协商】与用人单位协商补偿
 > 2. 【调解】申请企业劳动争议调解委员会调解
 > 3. 【仲裁】向劳动人事争议仲裁委员会申请仲裁（必经程序）
@@ -394,8 +408,8 @@ A：网络不稳定时可能出现，可切换至非深度思考模式。
 **Q5：Embedding 模型下载失败？**
 A：国内网络可能超时，在 `.env` 中设置 `HF_ENDPOINT=https://hf-mirror.com` 使用国内镜像。
 
-**Q6：能否修改默认检索模式？**
-A：可以。在 `.env` 中将 `SEARCH_MODE` 修改为 `hybrid`（混合）/ `semantic`（语义）/ `keyword`（关键词）后重启即可。Web 界面默认锁定为 `hybrid` 模式，无需手动选择。
+**Q6：能否修改检索模式？**
+A：可以。在 `.env` 中将 `SEARCH_MODE` 修改为 `hybrid`（混合）/ `semantic`（语义）/ `keyword`（关键词）后重启即可。Web 界面也可在底部输入区通过下拉菜单实时切换检索模式。
 
 **Q7：能否换用更大的中文 Embedding 模型？**
 A：可以。修改 `.env` 中 `EMBEDDING_MODEL_NAME`：
@@ -415,9 +429,9 @@ A：可以。修改 `.env` 中 `EMBEDDING_MODEL_NAME`：
 
 ---
 
-## �️ 路线图
+## 🗺️ 路线图
 
-- [ ] 引入 ReAct Agent 自动工具调用循环
+- [x] 引入 ReAct Agent 自动工具调用循环（已通过 LangGraph `create_agent` 实现）
 - [ ] 增加用户登录与多租户隔离
 - [ ] 引入 RAGAS 评估指标体系
 - [ ] 支持 DeepSeek 自家的 Embedding API（替代本地模型）
@@ -425,9 +439,9 @@ A：可以。修改 `.env` 中 `EMBEDDING_MODEL_NAME`：
 ---
 
 ## 👥 作者
-项目维护者名称：ShannZhong
-GitHub 仓库地址：https://github.com/ShannZhong/Legal-Consultation-Assistant
-问题反馈地址:https://github.com/ShannZhong/Legal-Consultation-Assistant/issues
+项目维护者名称：YJY-XYYC
+GitHub 仓库地址：https://github.com/YJY-XYYC/Legal-Consultation-Assistant
+问题反馈地址:https://github.com/YJY-XYYC/Legal-Consultation-Assistant/issues
 ---
 
 ⭐ 如果这个项目对你有帮助，欢迎 Star！

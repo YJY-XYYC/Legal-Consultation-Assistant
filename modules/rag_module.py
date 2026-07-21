@@ -8,6 +8,8 @@ from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
 import os
 import re
 import shutil
+import hashlib
+import jieba
 import config
 from collections import deque
 from datetime import datetime
@@ -185,6 +187,8 @@ class RAGModule:
 
         if not self.documents:
             print("警告：未加载任何知识库文档，请在 knowledge_base 文件夹中放入文档！")
+            # 知识库为空时，清理旧的向量库数据
+            self._clean_vectorstore()
             return 0
 
         text_splitter = RecursiveCharacterTextSplitter(
@@ -194,18 +198,27 @@ class RAGModule:
         splits = text_splitter.split_documents(self.documents)
         self.documents = splits
 
-        # 写入 / 更新 Chroma 向量库
-        if self.search_mode in ("semantic", "hybrid"):
-            try:
+        # 写入 / 更新 Chroma 向量库（始终检查文件变化，不依赖当前 search_mode）
+        try:
+            if self._should_rebuild_vectorstore(folder_path):
                 self._init_embeddings()
-                self._build_vectorstore(splits)
-            except Exception as e:
-                print(f"[RAG] 构建向量库失败: {e}，将降级为关键词检索。")
-                self.search_mode = "keyword"
+                if self.embeddings is not None:
+                    self._build_vectorstore(splits, folder_path)
+                else:
+                    print("[RAG] Embedding 模型未就绪，跳过向量库重建。")
+                    self.vectorstore = None
+                    self._chroma_loaded_from_disk = False
+            else:
+                print("[RAG] 知识库文件未变化，跳过向量库重建。")
+                self.vectorstore = None  # 延迟到首次检索时从磁盘加载
+                self._chroma_loaded_from_disk = False
+        except Exception as e:
+            print(f"[RAG] 构建向量库失败: {e}，将降级为关键词检索。")
+            self.search_mode = "keyword"
 
         return len(splits)
 
-    def _build_vectorstore(self, splits):
+    def _build_vectorstore(self, splits, folder_path=None):
         """构建/重建 Chroma 向量库。已存在则先清空，再灌入新数据。"""
         from langchain_chroma import Chroma
 
@@ -214,6 +227,10 @@ class RAGModule:
 
         if self.embeddings is None:
             return
+
+        # 先释放旧向量库引用，避免 Windows 文件锁定导致 shutil.rmtree 失败
+        self.vectorstore = None
+        self._chroma_loaded_from_disk = False
 
         if os.path.exists(persist_dir) and os.listdir(persist_dir):
             shutil.rmtree(persist_dir)
@@ -236,11 +253,93 @@ class RAGModule:
             pass
         self._chroma_loaded_from_disk = True
 
+        # 保存知识库文件指纹，用于后续判断是否需要重建
+        if folder_path:
+            self._save_fingerprint(folder_path)
+
+    # ======================== 向量库清理 ========================
+    def _clean_vectorstore(self):
+        """清空向量库（释放内存引用并删除磁盘数据）。"""
+        self.vectorstore = None
+        self._chroma_loaded_from_disk = False
+        persist_dir = config.CHROMA_PERSIST_DIRECTORY
+        if os.path.isdir(persist_dir):
+            try:
+                shutil.rmtree(persist_dir)
+                os.makedirs(persist_dir, exist_ok=True)
+            except Exception as e:
+                print(f"[RAG] 清理向量库目录失败: {e}")
+
+    # ======================== 知识库指纹（增量更新判断） ========================
+    def _compute_kb_fingerprint(self, folder_path):
+        """计算知识库文件指纹（基于文件路径、修改时间和分块参数）。"""
+        hasher = hashlib.md5()
+        if not os.path.isdir(folder_path):
+            return None
+        files = sorted(os.listdir(folder_path))
+        for fname in files:
+            fpath = os.path.join(folder_path, fname)
+            if os.path.isfile(fpath):
+                hasher.update(fname.encode("utf-8"))
+                hasher.update(str(os.path.getmtime(fpath)).encode("utf-8"))
+        hasher.update(str(config.CHUNK_SIZE).encode("utf-8"))
+        hasher.update(str(config.CHUNK_OVERLAP).encode("utf-8"))
+        return hasher.hexdigest()
+
+    def _fingerprint_path(self, folder_path):
+        """指纹文件存储路径。"""
+        return os.path.join(config.CHROMA_PERSIST_DIRECTORY, ".kb_fingerprint")
+
+    def _load_fingerprint(self, folder_path):
+        """从磁盘读取上次保存的指纹。"""
+        fp_file = self._fingerprint_path(folder_path)
+        if not os.path.isfile(fp_file):
+            return None
+        with open(fp_file, "r", encoding="utf-8") as f:
+            return f.read().strip()
+
+    def _save_fingerprint(self, folder_path):
+        """将当前指纹写入磁盘。"""
+        fp = self._compute_kb_fingerprint(folder_path)
+        if fp is None:
+            return
+        fp_file = self._fingerprint_path(folder_path)
+        os.makedirs(os.path.dirname(fp_file), exist_ok=True)
+        with open(fp_file, "w", encoding="utf-8") as f:
+            f.write(fp)
+
+    def _should_rebuild_vectorstore(self, folder_path):
+        """判断是否需要重建向量库。"""
+        persist_dir = config.CHROMA_PERSIST_DIRECTORY
+        # 向量库目录不存在或为空 -> 需要重建
+        if not os.path.isdir(persist_dir) or not os.listdir(persist_dir):
+            return True
+        # 指纹文件不存在（首次升级或异常丢失）-> 需要重建
+        if not os.path.isfile(self._fingerprint_path(folder_path)):
+            return True
+        current_fp = self._compute_kb_fingerprint(folder_path)
+        stored_fp = self._load_fingerprint(folder_path)
+        if current_fp is None or stored_fp is None:
+            return True
+        return current_fp != stored_fp
+
     # ======================== 关键词检索（保留兼容） ========================
     def _extract_keywords(self, text):
-        text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9]', ' ', text)
-        words = text.lower().split()
-        keywords = [w for w in words if len(w) >= 2 and w not in self.stopwords]
+        text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9]', ' ', text).lower()
+        # 先用空格初步切分，区分英文和中文字段
+        segments = text.split()
+        keywords = []
+        for seg in segments:
+            if seg.isascii():
+                # 英文/数字段：直接按原逻辑保留
+                if len(seg) >= 2 and seg not in self.stopwords:
+                    keywords.append(seg)
+            else:
+                # 中文段：用 jieba 精准分词
+                for token in jieba.cut(seg):
+                    token = token.strip().lower()
+                    if len(token) >= 2 and token not in self.stopwords:
+                        keywords.append(token)
         return keywords
 
     def _calculate_relevance(self, doc_content, keywords):
@@ -252,8 +351,10 @@ class RAGModule:
                 score += 3
                 matched_keywords.append(keyword)
             else:
-                for kw in keyword:
-                    if len(kw) >= 2 and kw in content_lower:
+                # 完整关键词未命中时，用2字滑动窗口做子串匹配（中文 bigram）
+                for i in range(len(keyword) - 1):
+                    bigram = keyword[i:i+2]
+                    if bigram in content_lower:
                         score += 1
         common_chars = set(keywords) & set(content_lower)
         score += len(common_chars) * 0.5
@@ -324,10 +425,8 @@ class RAGModule:
         if not hasattr(self, "_doc_index"):
             self._doc_index = {}
 
-        sem_docs = self._semantic_search(question, top_k=config.SEMANTIC_TOP_K) \
-            if self.search_mode in ("semantic", "hybrid") else []
-        kw_docs = self._keyword_search(question, top_k=config.KEYWORD_TOP_K) \
-            if self.search_mode in ("keyword", "hybrid") else []
+        sem_docs = self._semantic_search(question, top_k=config.SEMANTIC_TOP_K)
+        kw_docs = self._keyword_search(question, top_k=config.KEYWORD_TOP_K)
 
         rrf_k = 60
         scores = {}
@@ -352,8 +451,12 @@ class RAGModule:
 
     # ======================== 路由检索 ========================
     def _retrieve(self, question, top_k=None):
-        if self.search_mode == "semantic" and self.embeddings is not None:
-            docs = self._semantic_search(question, top_k=top_k or config.SEMANTIC_TOP_K)
+        if self.search_mode == "semantic":
+            if self.embeddings is not None:
+                docs = self._semantic_search(question, top_k=top_k or config.SEMANTIC_TOP_K)
+            else:
+                # Embedding 未就绪，降级为关键词检索
+                docs = self._keyword_search(question, top_k=top_k or config.KEYWORD_TOP_K)
         elif self.search_mode == "keyword":
             docs = self._keyword_search(question, top_k=top_k or config.KEYWORD_TOP_K)
         else:
@@ -370,6 +473,23 @@ class RAGModule:
             content = doc.page_content.strip()
             result.append(f"【{source}】\n{content}")
         return "\n\n".join(result)
+
+    # ======================== 公开检索方法（供 Agent 工具调用） ========================
+    def search(self, query, top_k=None, search_mode=None):
+        """公开检索方法：仅检索知识库，不修改对话历史，不调用 LLM。
+        返回 (formatted_text, list_of_docs) 二元组。
+        """
+        original_mode = self.search_mode
+        if search_mode:
+            self.search_mode = search_mode
+        try:
+            docs = self._retrieve(query, top_k=top_k)
+            if not docs and self.documents:
+                docs = self.documents[: top_k or config.TOP_K]
+            formatted = self._format_docs(docs) if docs else ""
+            return formatted, docs
+        finally:
+            self.search_mode = original_mode
 
     # ======================== 对外问答 ========================
     def ask(self, question, session_id="default", search_mode=None):
@@ -394,6 +514,33 @@ class RAGModule:
 
         self.add_to_history(session_id, question, answer)
         return answer
+
+    def ask_stream(self, question, session_id="default", search_mode=None):
+        if search_mode:
+            self.search_mode = search_mode
+        if not self.documents:
+            yield "请先加载知识库！"
+            return
+
+        relevant_docs = self._retrieve(question)
+        if not relevant_docs:
+            relevant_docs = self.documents[:config.TOP_K]
+
+        context = self._format_docs(relevant_docs)
+        chat_history = self.get_chat_history_str(session_id)
+
+        messages = self.prompt.invoke({
+            "context": context,
+            "question": question,
+            "chat_history": chat_history
+        })
+        full_answer = ""
+        for chunk in self.llm.stream(messages):
+            if chunk.content:
+                full_answer += chunk.content
+                yield chunk.content
+
+        self.add_to_history(session_id, question, full_answer)
 
     def ask_with_web_search(self, question, session_id="default", search_mode=None):
         if search_mode:
@@ -439,6 +586,58 @@ class RAGModule:
             "web_results": web_results,
             "web_error": web_error,
         }
+
+    def ask_with_web_search_stream(self, question, session_id="default", search_mode=None):
+        if search_mode:
+            self.search_mode = search_mode
+
+        relevant_docs = self._retrieve(question)
+        if not relevant_docs:
+            relevant_docs = self.documents[:config.TOP_K]
+        kb_context = self._format_docs(relevant_docs)
+        chat_history = self.get_chat_history_str(session_id)
+
+        web_results = []
+        web_error = None
+        try:
+            api_wrapper = TavilySearchAPIWrapper()
+            raw_results = api_wrapper.raw_results(
+                question,
+                max_results=5,
+                include_answer=False,
+            )
+            web_results = raw_results.get("results", []) or []
+            if isinstance(web_results, list) and web_results:
+                web_context = "\n".join(
+                    [f"{i+1}. {r.get('title', '无标题')}\n   {r.get('url', '')}" for i, r in enumerate(web_results)]
+                )
+            else:
+                web_context = "（联网搜索未返回结果）"
+        except Exception as e:
+            web_error = str(e)
+            web_context = f"联网搜索失败：{web_error}"
+
+        web_context_dict = {
+            "web_results": web_results,
+            "web_error": web_error,
+        }
+
+        messages = self.web_prompt.invoke({
+            "kb_context": kb_context,
+            "web_context": web_context,
+            "question": question,
+            "chat_history": chat_history
+        })
+
+        def stream_generator():
+            full_answer = ""
+            for chunk in self.llm.stream(messages):
+                if chunk.content:
+                    full_answer += chunk.content
+                    yield chunk.content
+            self.add_to_history(session_id, question, full_answer)
+
+        return stream_generator(), web_context_dict
 
     def get_search_mode(self):
         return self.search_mode

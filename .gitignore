@@ -13,12 +13,14 @@ env/
 # IDE
 .idea/
 .vscode/
+.trae/
 *.swp
 *.swo
 
 # Cache & models
 models_cache/
 vector_store/
+chroma_db/
 
 # Environment & secrets
 .env

@@ -55,8 +55,14 @@ class LLMQASystem:
 
             elif choice == "2":
                 task = input("\n[行] 请输入任务内容：")
-                result = self.agent.run_task(task)
-                print("\n[OK] 结果：\n", result)
+                print("\n[OK] 结果：")
+                result_text = ""
+                for event in self.agent.run_task_stream(task):
+                    if event["type"] == "answer_complete":
+                        result_text = event["content"]
+                    elif event["type"] == "error":
+                        result_text = event["content"]
+                print(result_text)
 
             elif choice == "0":
                 print("\n👋 感谢使用，再见！")
